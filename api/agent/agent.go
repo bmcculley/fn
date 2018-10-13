@@ -656,7 +656,7 @@ func (s *hotSlot) dispatch(ctx context.Context, call *call) chan error {
 
 		// TODO it's possible we can get rid of this (after getting rid of logs API) - may need for call id/debug mode still
 		// TODO there's a timeout race for swapping this back if the container doesn't get killed for timing out, and don't you forget it
-		swapBack := s.container.swap(nil, call.stderr, call.stderr, &call.Stats)
+		swapBack := s.container.swap(call.stderr, call.stderr, &call.Stats)
 		defer swapBack()
 
 		req := callToHTTPRequest(ctx, call)
@@ -1036,7 +1036,6 @@ type container struct {
 	logCfg     drivers.LoggerConfig
 	close      func()
 
-	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
 
@@ -1049,7 +1048,6 @@ type container struct {
 func newHotContainer(ctx context.Context, call *call, cfg *Config) (*container, error) {
 	id := id.New().String()
 
-	stdin := common.NewGhostReader()
 	stderr := common.NewGhostWriter()
 	stdout := common.NewGhostWriter()
 
@@ -1083,7 +1081,6 @@ func newHotContainer(ctx context.Context, call *call, cfg *Config) (*container, 
 
 	stdout.Swap(newLineWriterWithBuffer(buf1, soc))
 	stderr.Swap(newLineWriterWithBuffer(buf2, sec))
-	// XXX(reed): we should turn off stdin
 
 	var iofs iofs
 	var err error
@@ -1114,11 +1111,9 @@ func newHotContainer(ctx context.Context, call *call, cfg *Config) (*container, 
 				{Name: "fn_id", Value: call.FnID},
 			},
 		},
-		stdin:  stdin,
 		stdout: stdout,
 		stderr: stderr,
 		close: func() {
-			stdin.Close()
 			stderr.Close()
 			stdout.Close()
 			for _, b := range bufs {
@@ -1133,9 +1128,8 @@ func newHotContainer(ctx context.Context, call *call, cfg *Config) (*container, 
 	}, nil
 }
 
-func (c *container) swap(stdin io.Reader, stdout, stderr io.Writer, cs *drivers.Stats) func() {
+func (c *container) swap(stdout, stderr io.Writer, cs *drivers.Stats) func() {
 	// if tests don't catch this, then fuck me
-	ostdin := c.stdin.(common.GhostReader).Swap(stdin)
 	ostdout := c.stdout.(common.GhostWriter).Swap(stdout)
 	ostderr := c.stderr.(common.GhostWriter).Swap(stderr)
 
@@ -1145,7 +1139,6 @@ func (c *container) swap(stdin io.Reader, stdout, stderr io.Writer, cs *drivers.
 	c.swapMu.Unlock()
 
 	return func() {
-		c.stdin.(common.GhostReader).Swap(ostdin)
 		c.stdout.(common.GhostWriter).Swap(ostdout)
 		c.stderr.(common.GhostWriter).Swap(ostderr)
 		c.swapMu.Lock()
@@ -1156,7 +1149,7 @@ func (c *container) swap(stdin io.Reader, stdout, stderr io.Writer, cs *drivers.
 
 func (c *container) Id() string                         { return c.id }
 func (c *container) Command() string                    { return "" }
-func (c *container) Input() io.Reader                   { return c.stdin }
+func (c *container) Input() io.Reader                   { return nil }
 func (c *container) Logger() (io.Writer, io.Writer)     { return c.stdout, c.stderr }
 func (c *container) Volumes() [][2]string               { return nil }
 func (c *container) WorkDir() string                    { return "" }
