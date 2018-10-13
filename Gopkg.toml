@@ -81,3 +81,8 @@ ignored = ["github.com/fnproject/fn/cli",
 [[override]]
   name = "github.com/docker/libnetwork"
   revision = "0ae9b6f38f24f65567d4b46602502b33c95cf57a"
+
+# this is really dumb, the images section does this, need to move images
+[[override]]
+  revision = "80587e856ebb4a7a28db9387417c2fc1962e5fa0"
+  name = "github.com/fnproject/fdk-go"
